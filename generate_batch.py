@@ -18,7 +18,7 @@ class BatchGenerator:
         self.batch_size = batch_size
         
         # compile the scrambler by runnign compile_scrambler.sh
-        subprocess.run(["./compile_scrambler.sh"])
+        subprocess.run(["./scripts/compile_scrambler.sh"])
 
     def __call__(self):
     
@@ -26,13 +26,13 @@ class BatchGenerator:
         scrambles = [self.generate_scramble() for _ in range(self.batch_size)]
 
         # call apply_scramble.sh
-        subprocess.run(["./apply_scramble.sh", *scrambles])
+        subprocess.run(["./scripts/apply_scramble.sh", *scrambles])
 
         # read the output of apply_scramble.sh
         with open("scrambled_cube_states.json", "r") as f:
             data = json.load(f)
             
-        return torch.tensor(data)
+        return torch.tensor(data), scrambles
         
         
     def generate_scramble(self):

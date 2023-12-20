@@ -6,7 +6,6 @@ use std::error::Error;
 fn main() {
     let scrambles = match parse_args() {
         Ok(scrambles) => {
-            println!("Scrambles: {:?}", scrambles);
             scrambles
         }
         Err(e) => {
@@ -17,8 +16,6 @@ fn main() {
 
     let mut tensor_cubes = Vec::new();
 
-    // print the length of the scramble
-    println!("Number of scrambles: {}", scrambles.len());
 
     for scramble in scrambles {
         let mut tensor_cube = cube::create_solved_cube();

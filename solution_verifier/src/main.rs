@@ -1,6 +1,6 @@
 
 extern crate cube_move_library;
-use cube_move_library::{cube, moves, rotation};
+use cube_move_library::{cube, moves};
 mod verify;
 mod parse;
 
@@ -9,8 +9,6 @@ fn main() {
     // Parse the command line arguments ----> 2 string vectors containing the scramble and solution
     let (scramble, solution) = match parse::parse_args() {
         Ok((first_arg_words, second_arg_words)) => {
-            println!("Scramble: {:?}", first_arg_words);
-            println!("Proposed Solution: {:?}", second_arg_words);
             (first_arg_words, second_arg_words)
         }
         Err(e) => {
@@ -33,11 +31,16 @@ fn main() {
         moves::make_move(&mut rubiks_cube, move_str);
     }
 
-    // Check if the cube is solved
-    if verify::is_solved(&rubiks_cube) {
-        println!("Cube is solved!");
-    } else {
-        println!("Cube is not solved!");
-    }
+
+    let mut solved_state = 0;
+
+    // Check if the cube is solved. save to solve_status.json
+    if verify::is_solved(&rubiks_cube) {    
+        solved_state = 1;
+    } 
+    
+    // save serialized to file
+    let serialized = serde_json::to_string(&solved_state).unwrap();
+    std::fs::write("../solve_status.json", serialized).expect("Unable to write file");
 }
 

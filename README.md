@@ -13,7 +13,7 @@ After thinking about this for some time now, I have come up with the following s
 ## How to represent the rubiks cube data?
 The rubiks cube will be represented in memory as an integer encoded 3D Tensor of size 5x5x5. The reason for being 5x5x5 is that although a rubiks cube has 3 "squares" per axis (when looking directly at a face), it should be noted that the "colors" of the "square" belong to a physical object. Corners and edges are single pieces. Neither a corner, nor an edge, can be disconnected from their adjacent colors. This means that a 3x3x3 representation of the rubiks cube is insufficient to represent the cube spatially in memory, it must be at least 5x5x5 to account for this geometry.
 
-This representation will be create and "rotated" using a modification of a previous project of mine for creating [zero knowledge proofs of rubiks cube solutions](https://github.com/Holindauer/zk-Cube). This rust program is cabable of simulating all 12 moves of the rubiks cube in the 5x5x5 Tensor representation, as well as for verifying a complete solution.
+This representation will be created and "rotated" using a modification of a previous project of mine for creating [zero knowledge proofs of rubiks cube solutions](https://github.com/Holindauer/zk-Cube). This rust program is cabable of simulating all 12 moves of the rubiks cube in the 5x5x5 Tensor representation, as well as for verifying a complete solution.
 
 ## Surprise! We are not using a dataset to train the model... What? How?
 
@@ -21,7 +21,7 @@ Training a neural net without a dataset may initially seem impossible. Especiall
 
 However, by taking a note from the reinforcement learning playbook, we can train a neural net by having it play against itself. But how can a rubiks cube play against itself? 
 
-The answer is that we can compare the move made by the neural network to the output of a programatic/logical rubiks cube solver. This wull work because the "mechanical" solver is deterministic. It will use the [CFOP](https://jperm.net/3x3/cfop) solving method to determine the next move that should be made given a cube state. Thus, an impromptu dataset will be created during training. Infinite data.
+The answer is that we can compare the move made by the neural network to the output of a programatic/logical rubiks cube solver. This will work because the "mechanical" solver is deterministic. It will use the [CFOP](https://jperm.net/3x3/cfop) solving method to determine the next move that should be made given a cube state. Thus, an impromptu dataset will be created during training. Infinite data.
 
 The idea of training, then, is to *encode the deterministic logical steps of the CFOP method into the neural network*!
 

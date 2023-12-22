@@ -1,13 +1,12 @@
 #!/bin/bash
 
 # Define the path to the directory containing your Rust project
-PROJECT_DIR="../solution_verifier"
+PROJECT_DIR="cube"
 
-# Change to the project directory
-cd "$PROJECT_DIR" || { echo "Error: Directory '$PROJECT_DIR' not found."; exit 1; }
+cd ../cube
 
 # Path to the precompiled Rust binary
-RUST_PROGRAM="./target/release/solution_verifier"
+RUST_PROGRAM="./target/release/verify_solution"
 
 # Pass all arguments to the Rust program
 "$RUST_PROGRAM" "$@"

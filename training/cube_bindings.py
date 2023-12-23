@@ -3,32 +3,22 @@ import os
 import random
 import json
 import torch
-from dataclasses import dataclass
 
 '''
 cube_bindings.py contains a a class that provides python bindings to the "cube" program written in rust.
 '''
 
-
-@dataclass
-class TrainConfig:
-    batch_size :int
-    scramble_len :int
-
 class Cube:
-    def __init__(self, config :TrainConfig):
+    def __init__(self) -> None:
 
         # compile the scrambler by running compile_rust_cube.sh
         subprocess.run(['../scripts/compile_rust_cube.sh'])
 
-        self.batch_size = config.batch_size
-        self.scramble_len = config.scramble_len
-
-    def generate_data(self):
+    def generate_data(self, batch_size : int, scramble_len : int) -> (torch.Tensor, list[str]):
         # Generate a random 20 move scramble of the possible moves
         moves = ["U", "U'", "D", "D'", "L", "L'", "R", "R'", "F", "F'", "B", "B'"]
-        generate_scramble = lambda :  " ".join([random.choice(moves) for _ in range(self.scramble_len)])
-        scrambles = [generate_scramble() for _ in range(self.batch_size)]
+        generate_scramble = lambda :  " ".join([random.choice(moves) for _ in range(scramble_len)])
+        scrambles = [generate_scramble() for _ in range(batch_size)]
 
         # call apply_scramble.sh
         subprocess.run(["../scripts/apply_scramble.sh", *scrambles])
@@ -39,7 +29,19 @@ class Cube:
             
         return torch.tensor(data), scrambles
     
-    def is_solved(self, scramble : str, solution : str) -> int:
+    
+    def apply_moves(self, moves_list : list[str]) -> None:
+        """
+        apply_moves() accepts a list of scrambles and applies them to the cube using the apply_scramble.sh script.
+        """
+        subprocess.run(["../scripts/apply_scramble.sh", *moves_list])
+
+        with open("scrambled_cube_states.json", "r") as f:
+            data = json.load(f)
+
+        return torch.tensor(data)
+    
+    def is_solved(self, scramble : str, solution : str) -> bool:
 
         subprocess.run(["../scripts/check_solved.sh", scramble, solution])
 
@@ -47,9 +49,12 @@ class Cube:
         with open("solve_status.json", "r") as f:
            solved = json.load(f)
 
-        return solved
+        if solved:
+            return True
+        else:
+            return False
 
-    def is_cross_solved(self, scramble : str) -> int:
+    def is_cross_solved(self, scramble : str) -> bool:
 
         subprocess.run(["../scripts/is_cross_solved.sh", scramble])
 
@@ -57,7 +62,10 @@ class Cube:
         with open("cross_solve_status.json", "r") as f:
            solved = json.load(f)
 
-        return solved
+        if solved:
+            return True
+        else:
+            return False
 
     def solve_cross(self, scramble : str) -> str:
 

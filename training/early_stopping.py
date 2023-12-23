@@ -1,7 +1,7 @@
 import torch
 import copy
 
-class Early_Stopping:
+class EarlyStopping:
     def __init__(self, patience: int = 10, min_delta: float = 0.0) -> None:
         # Early stopping hyper-parameters
         self.patience = patience

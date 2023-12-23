@@ -11,7 +11,7 @@ use crate::moves;
 pub fn verify_cross(cube: &mut [[[i32; 5]; 5]; 5]) -> bool {
 
     // create a for loop with 4 iterations
-    for i in 0..4 {
+    for _ in 0..4 {
 
         // check if the cross is solved
         if check_cross(cube) == 4 {

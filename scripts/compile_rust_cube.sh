@@ -13,9 +13,6 @@ if [ ! -f "Cargo.toml" ]; then
 fi
 
 # Compile the Rust program in release mode using Cargo
-echo "Cleaning the solution_verifier Rust program..."
-cargo clean
-
 echo "Compiling the solution_verifier Rust program in release mode..."
 cargo build --release
 

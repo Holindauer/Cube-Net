@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 
 """
 Credit for this code goes to https://github.com/automan000/Convolutional_LSTM_PyTorch/blob/master/convolution_lstm.py
@@ -83,39 +82,49 @@ class ConvLSTMCell(nn.Module):
         """
         if self.Wci is None:
             # Initialize peephole connections
-            self.Wci = nn.Parameter(torch.zeros(1, hidden, shape[0], shape[1], shape[2])).cpu()
-            self.Wcf = nn.Parameter(torch.zeros(1, hidden, shape[0], shape[1], shape[2])).cpu()
-            self.Wco = nn.Parameter(torch.zeros(1, hidden, shape[0], shape[1], shape[2])).cpu()
+            self.Wci = nn.Parameter(torch.zeros(1, hidden, shape[0], shape[1], shape[2]))
+            self.Wcf = nn.Parameter(torch.zeros(1, hidden, shape[0], shape[1], shape[2]))
+            self.Wco = nn.Parameter(torch.zeros(1, hidden, shape[0], shape[1], shape[2]))
         else:
             # Check if the input shape matches the expected shape
             assert shape[0] == self.Wci.size()[2], 'Input Depth Mismatched!'
             assert shape[1] == self.Wci.size()[3], 'Input Height Mismatched!'
             assert shape[2] == self.Wci.size()[4], 'Input Width Mismatched!'
-        return (Variable(torch.zeros(batch_size, hidden, shape[0], shape[1], shape[2])).cpu(),
-                Variable(torch.zeros(batch_size, hidden, shape[0], shape[1], shape[2])).cpu())
+        return ((torch.zeros(batch_size, hidden, shape[0], shape[1], shape[2])), 
+                torch.zeros(batch_size, hidden, shape[0], shape[1], shape[2]))
 
 class ConvLSTM(nn.Module):
     """
-    ConvLSTM implements a multi-layer convolutional LSTM.
+    ConvLSTM implements a multi-layer convolutional LSTM network.
+
+    This ConvLSTM model is designed to process a sequence of 3D data (such as a sequence of images)
+    and output the state from the last time step. It's suitable for tasks where the final state after
+    processing the entire sequence is important, such as in sequence-to-one modeling.
 
     Attributes:
-    input_channels (int): Number of channels in the input tensor.
-    hidden_channels (list of int): Number of channels in hidden states for each layer.
-    kernel_size (int): Size of the kernel in convolutions.
-    step (int): Number of time steps to unroll the LSTM.
-    effective_step (list of int): Time steps at which outputs are recorded.
+        input_channels (int): Number of channels in the input tensor.
+        hidden_channels (list of int): Number of channels in hidden states for each layer.
+        kernel_size (int): Size of the kernel in convolutions.
+        num_layers (int): Number of layers in the ConvLSTM.
+        _all_layers (list): Internal list that stores all the ConvLSTMCell layers.
     """
-    def __init__(self, input_channels, hidden_channels, kernel_size, step=1, effective_step=[1]):
+
+    def __init__(self, input_channels, hidden_channels, kernel_size):
+        """
+        Initializes the ConvLSTM network.
+
+        Args:
+            input_channels (int): Number of channels in the input tensor.
+            hidden_channels (list of int): Number of channels in hidden states for each layer.
+            kernel_size (int): Size of the kernel in convolutions.
+        """
         super(ConvLSTM, self).__init__()
         self.input_channels = [input_channels] + hidden_channels
         self.hidden_channels = hidden_channels
         self.kernel_size = kernel_size
         self.num_layers = len(hidden_channels)
-        self.step = step
-        self.effective_step = effective_step
         self._all_layers = []
         for i in range(self.num_layers):
-            # Create and add ConvLSTM cells for each layer
             name = 'cell{}'.format(i)
             cell = ConvLSTMCell(self.input_channels[i], self.hidden_channels[i], self.kernel_size)
             setattr(self, name, cell)
@@ -125,42 +134,36 @@ class ConvLSTM(nn.Module):
         """
         Defines the forward pass of the ConvLSTM.
 
+        Processes the input through each time step and layer of ConvLSTM cells, and returns only the final output
+        after the last time step. This output reflects the state of the network after processing the entire sequence.
+
         Args:
-        input (Tensor): The input tensor with shape [batch-size, time-series-steps, channels, depth, height, width].
+            input (Tensor): The input tensor with shape [batch size, time-series steps, channels, depth, height, width].
 
         Returns:
-        list of Tensor: Recorded outputs at effective steps.
-        (Tensor, Tensor): The last hidden state and cell state.
+            Tensor: The output tensor from the last time step with shape [batch size, channels, depth, height, width].
         """
         internal_state = []
-        outputs = []
 
         # Iterate over time series steps
         for time_step in range(input.size(1)):
-
-            # Extract the data for the current time step
-            x = input[:, time_step, :, :, :, :]
+            x = input[:, time_step, :, :, :, :].float()
 
             for layer_idx in range(self.num_layers):
                 name = 'cell{}'.format(layer_idx)
-                # Initialize internal states for the first time step
                 if time_step == 0:
                     bsize, _, depth, height, width = x.size()
-                    (h, c) = getattr(self, name).init_hidden(batch_size=bsize, hidden=self.hidden_channels[layer_idx],
-                                                             shape=(depth, height, width))
+                    (h, c) = getattr(self, name).init_hidden(bsize, self.hidden_channels[layer_idx], (depth, height, width))
                     internal_state.append((h, c))
 
-                # Forward pass through each ConvLSTM cell
                 (h, c) = internal_state[layer_idx]
                 x, new_c = getattr(self, name)(x, h, c)
                 internal_state[layer_idx] = (x, new_c)
 
-            # Record outputs at specified effective steps
-            if time_step in self.effective_step:
-                outputs.append(x)
+        # Return the output from the last time step
+        return x
 
-        return outputs, (x, new_c)
-    
+
 class ConvLSTMClassifier(nn.Module):
     """
     ConvLSTMClassifier combines the ConvLSTM with a classification head.
@@ -169,7 +172,7 @@ class ConvLSTMClassifier(nn.Module):
     conv_lstm (ConvLSTM): The ConvLSTM model.
     num_classes (int): Number of classes for classification.
     """
-    def __init__(self, conv_lstm, num_output_features, num_classes=12):
+    def __init__(self, conv_lstm, num_output_features, num_classes=13):
         super(ConvLSTMClassifier, self).__init__()
         self.conv_lstm = conv_lstm
         self.num_classes = num_classes
@@ -183,45 +186,10 @@ class ConvLSTMClassifier(nn.Module):
 
     def forward(self, x):
         # Forward pass through ConvLSTM
-        conv_lstm_output, _ = self.conv_lstm(x)
-        # Take the last output for classification
-        x = conv_lstm_output[-1]  # Assuming we use the last time step for classification
-
+        conv_lstm_output = self.conv_lstm(x)
+        
         # Flatten and pass through the classification layers
-        x = self.flatten(x)
+        x = self.flatten(conv_lstm_output)
         x = self.fc(x)
         return x
     
-if __name__ == '__main__':
-    # Initialize ConvLSTM
-    conv_lstm = ConvLSTM(input_channels=1, hidden_channels=[8, 16, 32, 32, 32], kernel_size=3, step=5, effective_step=[4]).cpu()
-
-    num_output_features = 32 * 16 * 16 * 16  # Replace with the correct size
-
-    # Initialize ConvLSTMClassifier
-    classifier = ConvLSTMClassifier(conv_lstm, num_output_features, num_classes=12).cpu()
-
-    # Example input and target data for classification
-    input = Variable(torch.randn(1, 5, 1, 16, 16, 16)).cpu()
-    target = Variable(torch.empty(1, dtype=torch.long).random_(12)).cpu()  # Random target classes
-
-    # Forward pass through the classifier
-    output = classifier(input)
-
-    # argmax the output probability vector
-    prediction = output.argmax(dim=1)
-
-    # Print shapes for verification
-    print('Input size:', input.shape)
-    print('Output size:', output.shape)
-    print('Prediction size:', prediction.shape)
-    print('Target size:', target.shape)
-
-    # Loss and gradient check (for classification task)
-    loss_fn = torch.nn.CrossEntropyLoss()
-    loss = loss_fn(output, target)
-    loss.backward()
-
-    # # Uncomment below to perform gradient check
-    # res = torch.autograd.gradcheck(loss_fn, (output, target), eps=1e-6, raise_exception=True)
-    # print(res)

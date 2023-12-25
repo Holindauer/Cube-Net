@@ -63,6 +63,9 @@ class Trainer:
             # generate a batch of training data
             cube_states, scrambles = self.get_batch()
 
+            # normalize the initial cube states
+            cube_states = self.nomalize(cube_states)
+
             print(f'cube_states shape: {cube_states.shape}')
 
             # This is a list of list of strings. (each str is an individual move)
@@ -89,6 +92,7 @@ class Trainer:
                 # forward pass 
                 print(f'cube_states shape: {cube_states.shape}')
 
+
                 cube_states = cube_states.to(self.device)
 
                 outputs = self.model(cube_states) # probabilitiy distribution over the 12 possible moves
@@ -102,6 +106,9 @@ class Trainer:
                 moves = [ self.moves[pred[i]] for i in range(self.batch_size) ] # convert move pred to string representation
                 all_moves_made = [ " ".join([scrambles[i], moves[i]]) for i in range(self.batch_size) ]
                 next_cube_state = self.cube.apply_moves(all_moves_made).unsqueeze(1).unsqueeze(1) # <-- add channels and time series dimmensions
+
+                # normalize the next cube state
+                next_cube_state = self.nomalize(next_cube_state)
                 
                 # concat the next cube state to the cube states along the time-step dimmension
                 cube_states = torch.cat((cube_states, next_cube_state), dim=1)
@@ -130,6 +137,19 @@ class Trainer:
 
             print(f'epoch: {i} | train loss: {self.train_loss[i]}')
 
+    def nomalize(self, data : Tensor):
+        '''
+        Because the cube is integer encoded form 1-6, and we want to normalize the data
+        between 0 and 1, AND we don't want the data to be too sparse because of all the 
+        0 elements, we add 1 to all elements and divide by 7. This will give us a range
+        between 0 and 1, and the data will be dense.
+        '''
+
+        # broadcast addition by 1 to all elements
+        data += 1
+
+        # divide by 7 to get values between 0 and 1
+        return data / 7
 
 
     def get_batch(self) -> (Tensor, list[str]):
@@ -184,6 +204,7 @@ class Trainer:
 
             else : # unsqueeze is used to add the channels and time series dimmensions
                 return cube_states.unsqueeze(1).unsqueeze(1), scrambles
+            
 
 
 

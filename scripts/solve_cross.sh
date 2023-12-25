@@ -3,7 +3,7 @@
 # Define the path to the directory containing your Rust project
 PROJECT_DIR="cube"
 
-cd ../cube
+cd cube
 
 # Path to the precompiled Rust binary
 RUST_PROGRAM="./target/release/solve_cross"

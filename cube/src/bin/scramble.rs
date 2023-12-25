@@ -28,7 +28,7 @@ fn main() {
     let serialized = serde_json::to_string(&tensor_cubes).unwrap();
 
     // save serialized to file
-    std::fs::write("../training/scrambled_cube_states.json", serialized).expect("Unable to write file");
+    std::fs::write("../json/scrambled_cube_states.json", serialized).expect("Unable to write file");
 
 }
 

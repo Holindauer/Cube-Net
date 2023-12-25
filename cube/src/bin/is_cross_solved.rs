@@ -35,6 +35,6 @@ fn main() {
 
     // save serialized to file
     let serialized = serde_json::to_string(&solved_state).unwrap();
-    std::fs::write("../training/cross_solve_status.json", serialized).expect("Unable to write file");
+    std::fs::write("../json/cross_solve_status.json", serialized).expect("Unable to write file");
 }
 

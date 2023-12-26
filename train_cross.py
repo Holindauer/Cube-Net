@@ -16,6 +16,7 @@ class TrainConfig:
     optimizer :torch.optim.Optimizer
     early_stopping :EarlyStopping
     criterion: nn.Module = nn.CrossEntropyLoss()
+    num_classes :int = 13
 
 class Trainer:
     def __init__(self, cube : Cube, config :TrainConfig, model :nn.Module) -> None:
@@ -28,6 +29,7 @@ class Trainer:
         self.optimizer = config.optimizer(model.parameters(), lr=config.lr)
         self.criterion = config.criterion
         self.scramble_len = config.scramble_len
+        self.num_classes = config.num_classes
 
         # setup early stopping
         self.early_stopping = config.early_stopping
@@ -45,7 +47,9 @@ class Trainer:
 
         # train stats
         self.train_loss = [ 0 for _ in range(self.epochs) ]
-        self.val_loss = [ 0 for _ in range(self.epochs) ]
+
+        # The train accuracy is calculated by correct-moves / total-moves per epoch
+        self.train_acc = [ 0 for _ in range(self.epochs) ]  
 
 
     def train(self) -> None:
@@ -58,54 +62,31 @@ class Trainer:
         be generated to serve as the training data of the model. 
         """
 
+        print("Training Model...")
+
         for i in range(self.epochs):
             
             # generate a batch of training data
             cube_states, scrambles = self.get_batch()
-
-            # normalize the initial cube states
             cube_states = self.nomalize(cube_states)
 
-            print(f'cube_states shape: {cube_states.shape}')
-
-            # This is a list of list of strings. (each str is an individual move)
-            true_solutions = [self.cube.solve_cross(scramble).split() for scramble in scrambles] 
-    
-            # append empty strings to the any actual solutions that are less than the longest actual solution list until they match that length
-            max_solution_len = max([len(solution) for solution in true_solutions])
-            for j in range(self.batch_size):
-                while len(true_solutions[j]) < max_solution_len:
-                    true_solutions[j].append("")
-
-            # using python string methods, replace '' with ' in the true solutions
-            true_solutions = [ [move.replace("'", "") for move in solution] for solution in true_solutions ]
-
-            # initialize the model solutions to be empty strings
-            model_solutions = [ "" for _ in range(self.batch_size) ]
-                    
-            print(f'length of max solution: {max_solution_len}')
-
+            # generate the true solutions for the scrambles
+            one_hot_true_solutions, max_solution_len = self.generate_solutions(scrambles)
 
             # iterate through the moves of true solutions
             for move in range(max_solution_len):
 
-                # forward pass 
-                print(f'cube_states shape: {cube_states.shape}')
-
+                print(f" {move} ", end="")
 
                 cube_states = cube_states.to(self.device)
 
                 outputs = self.model(cube_states) # probabilitiy distribution over the 12 possible moves
-                print(f'outputs shape: {outputs.shape}')
-
                 pred = torch.argmax(outputs, dim=1) # index of the most likely move
-                print(f'pred shape: {pred.shape}')
-
 
                 # update scrambles to include the models pred
                 moves = [ self.moves[pred[i]] for i in range(self.batch_size) ] # convert move pred to string representation
                 all_moves_made = [ " ".join([scrambles[i], moves[i]]) for i in range(self.batch_size) ]
-                next_cube_state = self.cube.apply_moves(all_moves_made).unsqueeze(1).unsqueeze(1) # <-- add channels and time series dimmensions
+                next_cube_state = self.cube.apply_moves(all_moves_made).unsqueeze(1).unsqueeze(1) # <-- unsqueeze to add channels and time series dimmensions
 
                 # normalize the next cube state
                 next_cube_state = self.nomalize(next_cube_state)
@@ -113,43 +94,84 @@ class Trainer:
                 # concat the next cube state to the cube states along the time-step dimmension
                 cube_states = torch.cat((cube_states, next_cube_state), dim=1)
                 
-                
-
-                # update true solutions to include the models pred
-                model_solutions = [ model_solutions[i] + moves[i] for i in range(self.batch_size) ] 
-
-                # convert the true solutions to a tensor of ints
-                correct_moves = torch.tensor([ self.moves.index(true_solutions[i][move]) for i in range(self.batch_size) ])
-
                 # calculate loss
-                loss = self.criterion(outputs, correct_moves)
-
-                # backprop
+                loss = self.criterion(outputs, one_hot_true_solutions[move])
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                # update train loss
+                # incrememnent train loss (prior to averaging)
                 self.train_loss[i] += loss.item()
+
+                # take the argmax of the one hot encoded true solutions to get the targets
+                target = torch.argmax(one_hot_true_solutions[move], dim=1)
+
+                self.train_acc[i] += torch.sum(pred == target).item()  # <--- incrememnt acc
 
             # average the epoch loss over the number of moves in the solution
             self.train_loss[i] /= max_solution_len
+            self.train_acc[i] /= (max_solution_len * self.batch_size)
 
-            print(f'epoch: {i} | train loss: {self.train_loss[i]}')
+            print(f'\nepoch: {i} | train loss: {self.train_loss[i]} | train acc: {self.train_acc[i]}')
 
-    def nomalize(self, data : Tensor):
+    def remove_initialmost_time_step(self, cube_states :Tensor) -> Tensor:
+        '''
+        This function removes the initialmost time step in the series in to implement a mechanism 
+        for the time series doesn't grow so large it is unmanaganle in terms of compute and memory.
+        '''
+
+        # remove the initialmost time step
+        return cube_states[:, 1:, :, :, :, :]
+
+
+    def generate_solutions(self, scrambles :list[str]) -> (list[list[str]], int):
+        '''
+        This funciton is used to generate the true solutions for the scrambles generated by the cube bindings.
+        The true solutions are generated by the cross solver program within the cube bindings.
+
+        The function will return a list of one hot encoded solutions tensors as well as the max length of the 
+        solutions. 
+        
+        Each Tensor in the list contains all correct moves for the batch for that indice's time step.
+        Meaning the shape will be (batch_size, 13) <=== where 13 is a one hot encoded vector of the correct move
+        '''
+
+        # This is a list of list of strings. (each str is an individual move)
+        true_solutions = [self.cube.solve_cross(scramble).split() for scramble in scrambles] 
+
+        # Remove any duplicate apostrophies
+        true_solutions = [ [move.replace("''", "'") for move in solution] for solution in true_solutions ]
+
+        # append empty strings to the any actual solutions that are less than the longest actual solution list until they match that length
+        max_solution_len = max([len(solution) for solution in true_solutions])
+        for j in range(self.batch_size):
+            while len(true_solutions[j]) < max_solution_len:
+                true_solutions[j].append("")
+
+        # one hot encode the true solutions
+        one_hot_solutions = []
+        for move in range(max_solution_len):
+            correct_move_indices = [ self.moves.index(true_solutions[b][move]) for b in range(self.batch_size) ]
+            one_hot_tensor_target = torch.zeros((self.batch_size, self.num_classes))
+
+            # Fill in the ones based on the integers
+            for b in range(self.batch_size):
+                # place a 1 in the correct move idx
+                one_hot_tensor_target[b, correct_move_indices[b]] = 1
+
+            one_hot_solutions.append(one_hot_tensor_target)
+
+        return one_hot_solutions, max_solution_len
+
+    def nomalize(self, data : Tensor) -> Tensor:
         '''
         Because the cube is integer encoded form 1-6, and we want to normalize the data
         between 0 and 1, AND we don't want the data to be too sparse because of all the 
         0 elements, we add 1 to all elements and divide by 7. This will give us a range
         between 0 and 1, and the data will be dense.
         '''
-
-        # broadcast addition by 1 to all elements
-        data += 1
-
-        # divide by 7 to get values between 0 and 1
-        return data / 7
+        # braodcast addition by 1 and div by 7 to get values between 0 and 1
+        return (data + 1) / 7
 
 
     def get_batch(self) -> (Tensor, list[str]):

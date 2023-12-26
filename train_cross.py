@@ -17,6 +17,7 @@ class TrainConfig:
     early_stopping :EarlyStopping
     criterion: nn.Module = nn.CrossEntropyLoss()
     num_classes :int = 13
+    max_time_steps :int = 10
 
 class Trainer:
     def __init__(self, cube : Cube, config :TrainConfig, model :nn.Module) -> None:
@@ -30,6 +31,7 @@ class Trainer:
         self.criterion = config.criterion
         self.scramble_len = config.scramble_len
         self.num_classes = config.num_classes
+        self.max_time_steps = config.max_time_steps 
 
         # setup early stopping
         self.early_stopping = config.early_stopping
@@ -93,6 +95,12 @@ class Trainer:
                 
                 # concat the next cube state to the cube states along the time-step dimmension
                 cube_states = torch.cat((cube_states, next_cube_state), dim=1)
+
+                # ensure the cube states do not exceed the max time steps
+                if cube_states.shape[1] > self.max_time_steps:
+                    cube_states = self.remove_initialmost_time_step(cube_states)
+
+                print(f"cube_states.shape: {cube_states.shape}")
                 
                 # calculate loss
                 loss = self.criterion(outputs, one_hot_true_solutions[move])

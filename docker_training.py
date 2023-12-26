@@ -20,7 +20,8 @@ if __name__ == "__main__":
         device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         optimizer=torch.optim.Adam,
         early_stopping=EarlyStopping(patience=10),
-        num_classes=13
+        num_classes=13,
+        max_time_steps = 10
     )
 
     print(f"using device: {config.device}")

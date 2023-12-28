@@ -19,10 +19,5 @@ RUN apt-get update && apt-get install -y curl build-essential
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-
-RUN pwd
-RUN ls
-
-
 # Run docker_training.py when the container launches
-CMD ["python3", "docker_training.py"]
+CMD ["python3", "train_cross_until_solved.py"]

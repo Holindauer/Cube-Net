@@ -3,6 +3,8 @@ import os
 import random
 import json
 import torch
+from torch import Tensor
+from typing import Tuple
 
 '''
 cube_bindings.py contains a a class that provides python bindings to the "cube" program written in rust.
@@ -16,7 +18,7 @@ class Cube:
         # compile the scrambler by running compile_rust_cube.sh
         subprocess.run(['scripts/compile_rust_cube.sh'])
 
-    def generate_data(self, batch_size : int, scramble_len : int) -> (torch.Tensor, list[str]):
+    def generate_data(self, batch_size : int, scramble_len : int) -> Tuple[Tensor, list[str]]:
         # Generate a random 20 move scramble of the possible moves
         moves = ["U", "U'", "D", "D'", "L", "L'", "R", "R'", "F", "F'", "B", "B'"]
         generate_scramble = lambda :  " ".join([random.choice(moves) for _ in range(scramble_len)])
@@ -32,7 +34,7 @@ class Cube:
         return torch.tensor(data), scrambles
     
     
-    def apply_moves(self, moves_list : list[str]) -> None:
+    def apply_moves(self, moves_list : list[str]) -> Tensor:
         """
         apply_moves() accepts a list of scrambles and applies them to the cube using the apply_scramble.sh script.
         """

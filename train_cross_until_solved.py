@@ -5,10 +5,12 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from typing import Tuple, List, Callable
+import time
+import copy
 
 
 """
-train_cross_until_solved.py is a modification of the original train_cross.py file. The difference is in how training happens within 
+train_cross_until_solved.py is a modification of the original train_cross.py file with modifications in how training happens within 
 each epoch. 
 
 In the original train_cross.py file, a set of solutions for the batch is generated at the start of each epoch that is iterated through
@@ -32,6 +34,7 @@ class TrainConfig:
     criterion: nn.Module = nn.CrossEntropyLoss()
     num_classes :int = 13
     max_time_steps :int = 10
+    epoch_max_moves :int = 2000
 
 class Trainer:
     def __init__(t, cube : Cube, config :TrainConfig, model :nn.Module) -> None:
@@ -48,6 +51,7 @@ class Trainer:
         t.scramble_len = config.scramble_len
         t.num_classes = config.num_classes
         t.max_time_steps = config.max_time_steps 
+        t.epoch_max_moves = config.epoch_max_moves
 
         # python bindings to the cube rust program
         t.cube = cube 
@@ -59,12 +63,10 @@ class Trainer:
         # model
         t.model = model
         t.model.to(t.device)
+        print(f"Sent model to {t.device}")
 
-        # train stats
-        t.train_loss = [ 0 for _ in range(t.epochs) ]
-
-        # The train accuracy is calculated by correct-moves / total-moves per epoch
-        t.train_acc = [ 0 for _ in range(t.epochs) ]  
+        t.best_model = copy.deepcopy(t.model.state_dict())
+        t.best_TP_freq : float = 0
 
 
     def train(t) -> None:
@@ -79,21 +81,35 @@ class Trainer:
 
         print("Training Model...")
 
-        for epoch in range(t.epochs):
+        for epoch in range(t.epochs):   
 
             # generate and normalize a batch of training data 
             batch : Tuple[Tensor, list[str]] = t.get_batch()
             cube_states, all_moves_made = t.nomalize(batch[0]), batch[1] 
 
-            t.train_on_batch(cube_states, all_moves_made)
+            t.train_on_batch(cube_states, all_moves_made, epoch)
   
 
 
-    def train_on_batch(t, cube_states :Tensor, all_moves_made :list[str]) -> None:
+    def train_on_batch(t, cube_states :Tensor, all_moves_made :list[str], epoch : int) -> None:
+        """ This function performs training on a single batch of cube states. The function recieves the cube_states and 
+        scrambles (ie: all_moves_made at the call of the funciton). The while-loop continues until the cube is found to 
+        be solved. Within each iteration, the model predicts a move to be made, this move is then applied to the cube_states. 
+        As well, all_moves_made is updated to reflect the model's decision. loss computation, backprop, and gradient descent 
+        also happen at each iteration.
+        """
 
         solved : bool = False
 
+        #  True Positives and Frequency of True Positives for the last 10 moves
+        TP : list[int] = [0]
+        TP_freq : list[float] = [0]
+
+        num_moves : int = 0
+
         while not solved:
+
+            start_time = time.time()    
 
             # generate a new cross solution for the moves made so far 
             one_hot_solutions : Tensor = t.next_correct_move(all_moves_made)
@@ -117,6 +133,32 @@ class Trainer:
             loss.backward()
             t.optimizer.step()
             t.optimizer.zero_grad()
+
+            end_time = time.time()
+
+            # update True Positives for the move
+            last_moves_made = [all_moves_made[i].split()[-1] for i in range(t.batch_size)]
+            correct_moves = [t.moves[one_hot_solutions[i].argmax().item()] for i in range(t.batch_size)]
+            TP.append(sum([last_moves_made[i] == correct_moves[i] for i in range(t.batch_size)]))
+            
+            # update TP freq for last 10 moves
+            if len(TP) > 10:
+                TP_freq.append(sum(TP[-10:]) / 10)
+            else:
+                TP_freq.append(sum(TP) / len(TP))
+
+            print(f"epoch: {epoch}, moves made: {num_moves}, loss: {loss.item()}, time: {end_time - start_time}, move TP: {TP[-1]}, TP freq: {TP_freq[-1]}")
+
+            num_moves += 1
+
+            if num_moves > t.epoch_max_moves:
+                print("max moves reached for this epoch")
+                break
+
+            if TP_freq[-1] > t.best_TP_freq:
+                t.best_TP_freq = TP_freq[-1]
+                t.best_model = copy.deepcopy(t.model.state_dict())
+                print("new best model")
 
 
     def update_cube_state_series(t, pred : Tensor, moves_made_so_far : list[str], cube_states_so_far : Tensor) -> Tuple[Tensor, list[str]]:
@@ -251,21 +293,26 @@ if __name__ == "__main__":
     cube = Cube()
 
     config = TrainConfig(
-        scramble_len=40,
-        epochs=1,
+        scramble_len=20,
+        epochs=100,
         val_num_batches=10,
-        batch_size=32,
+        batch_size=256,
         lr=0.001,
         device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         optimizer_factory=lambda model: torch.optim.Adam(model.parameters(), lr=0.001),
         num_classes=13,
-        max_time_steps = 10
+        max_time_steps = 10,
+        epoch_max_moves = 2000
     )
 
     print(f"using device: {config.device}")
 
-   # Initialize the ConvLSTM
-    conv_lstm = ConvLSTM(input_channels=1, hidden_channels=[8, 16, 32, 32, 64], kernel_size=3)
+    # Initialize the ConvLSTM
+    conv_lstm = ConvLSTM(input_channels=1, hidden_channels=[64, 64, 64, 64, 64], kernel_size=3)
+
+    # print model parameters
+    params : int = sum([p.numel() for p in conv_lstm.parameters()])
+    print(f"number of parameters: {params}")
 
     num_output_features = 64 * 5 * 5 * 5  # Replace with the correct size
 

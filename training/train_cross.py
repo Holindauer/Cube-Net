@@ -4,6 +4,7 @@ from cube_bindings import Cube
 import torch
 import torch.nn as nn
 from torch import Tensor
+from torch.utils.tensorboard import SummaryWriter
 from typing import Tuple, List, Callable
 import time
 import copy

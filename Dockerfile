@@ -31,4 +31,4 @@ COPY --from=rust-builder /cube/target/release/verify_solution /cube/target/relea
 COPY ./training ./training
 
 # Run training script when the container launches
-CMD ["python3", "training/train_cross_until_solved.py"]
+CMD ["python3", "training/train_cross.py"]

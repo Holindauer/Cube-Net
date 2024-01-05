@@ -1,0 +1,12 @@
+# Ignore Python bytecode directories
+__pycache__/
+
+# Ignore compiled files
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore Rust compilation directory
+target/
+
+.mypy_cache/

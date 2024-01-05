@@ -1,23 +1,34 @@
-FROM python:3.9-slim
+# Stage 1: Build Rust application in release mode
+FROM rust:1.58 as rust-builder
 
-WORKDIR /usr/src/app
+# Copy the source code of Rust application
+COPY ./cube /cube
+WORKDIR /cube
 
-# Copy just the requirements.txt first to leverage Docker cache
-COPY requirements.txt ./
+# Build the Rust application
+RUN cargo build --release
 
+# Final stage with PyTorch and Python environment
+FROM pytorch/pytorch:latest
 
-RUN pip install -r requirements.txt
+# Switch to root user for installation
+USER root
 
-# replace the above line with this one below for smaller image size
-#RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the rest of your application code
-COPY . .
-
-# Install Rust and build tools
+# Install necessary packages (if any)
 RUN apt-get update && apt-get install -y curl build-essential
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Run docker_training.py when the container launches
-CMD ["python3", "train_cross_until_solved.py"]
+# Copy the built Rust binaries from the builder stage
+# Replace 'binary1', 'binary2', etc. with your actual binary names
+COPY --from=rust-builder /cube/target/release/is_cross_solved /cube/target/release/is_cross_solved
+COPY --from=rust-builder /cube/target/release/scramble /cube/target/release/scramble
+COPY --from=rust-builder /cube/target/release/solve_cross /cube/target/release/solve_cross
+COPY --from=rust-builder /cube/target/release/verify_solution /cube/target/release/verify_solution
+
+# Switch back to non-root user if necessary
+# USER [your-non-root-user]
+
+# Copy Python code or other necessary files
+COPY ./training ./training
+
+# Run training script when the container launches
+CMD ["python3", "training/train_cross_until_solved.py"]

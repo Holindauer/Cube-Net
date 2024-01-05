@@ -70,6 +70,6 @@ fn main() {
     }
     // save serialized to file
     let serialized = serde_json::to_string(&full_solution).unwrap();
-    std::fs::write("../json/cross_solution.json", serialized).expect("Unable to write file");
+    std::fs::write("../../../training/json/cross_solution.json", serialized).expect("Unable to write file");
 }
 

@@ -9,4 +9,5 @@ __pycache__/
 # Ignore Rust compilation directory
 target/
 
+# Ignore mypy cache
 .mypy_cache/
